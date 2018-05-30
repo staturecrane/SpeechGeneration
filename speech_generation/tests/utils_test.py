@@ -25,6 +25,8 @@ def test_chunk_audio(audio):
         assert len(audio) % chunksize == 0
 
     assert len(chunked_audio)
+
+
 def test_build_model():
     model = build_model()
     assert model
