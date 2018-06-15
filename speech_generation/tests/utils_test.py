@@ -1,18 +1,21 @@
 import pytest
 import tensorflow
 
-from speech_generation.utils import load_audio, build_model, chunk_audio
+from speech_generation.utils import load_audio, chunk_audio, get_text_files, get_filenames_and_text
+
+
+TEST_DATA_DIR = 'speech_generation/tests/test_data'
 
 
 def test_load_audio():
-    sample_rate, audio = load_audio('speech_generation/tests/test.wav')
+    sample_rate, audio = load_audio(f'{TEST_DATA_DIR}/test.wav')
     assert sample_rate == 16000
     assert audio.shape[0] > 0 and audio.shape[1] == 1
 
 
 @pytest.fixture
 def audio():
-    return load_audio('speech_generation/tests/test.wav')
+    return load_audio(f'{TEST_DATA_DIR}/test.wav')
 
 
 def test_chunk_audio(audio):
@@ -27,8 +30,13 @@ def test_chunk_audio(audio):
     assert len(chunked_audio)
 
 
-def test_build_model():
-    model = build_model()
-    assert model
+def test_create_dataset():
+    text_files_string = ''.join(get_text_files(TEST_DATA_DIR))
+    assert 'text1.txt' in text_files_string and 'text2.txt' in text_files_string
 
-
+    sample_dict = get_filenames_and_text(f'{TEST_DATA_DIR}/text1.txt')
+    for key, sample in sample_dict.items():
+        assert len(key.split('-')) == 3
+        assert len(sample.split(' ')) > 0
+        assert sample.strip() == sample
+        assert not '\n' in sample
