@@ -1,16 +1,20 @@
 from keras.layers import (
-    Conv1D, Input, TimeDistributed, LSTM
+    Embedding, Input, TimeDistributed, LSTM,
+    Bidirectional, Dense
 )
 from keras.models import Model
 
+from speech_generation.config import N_LETTERS, MAX_INPUT_LENGTH
 
-def build_model():
+
+def build_embedding_model():
     """
     Builds model and returns it
 
     :returns keras.models.Model
     """
 
-    inputs = Input(shape=(None, 100, 1))
-    conv1 = TimeDistributed(Conv1D(10, 7))(inputs)
-    return Model(inputs, conv1)
+    inputs = Input(shape=(None, N_LETTERS))
+    lstm_two = Bidirectional(LSTM(128, recurrent_dropout=0.2))(inputs)
+    output = Dense(100)(lstm_two)
+    return Model(inputs=inputs, outputs=output)
