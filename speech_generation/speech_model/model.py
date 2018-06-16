@@ -1,20 +1,38 @@
-from keras.layers import (
-    Embedding, Input, TimeDistributed, LSTM,
-    Bidirectional, Dense
-)
-from keras.models import Model
+import torch
+import torch.nn as nn
 
 from speech_generation.config import N_LETTERS, MAX_INPUT_LENGTH
 
 
-def build_embedding_model():
-    """
-    Builds model and returns it
+class EmbeddingRNN(nn.Module):
+    def __init__(self, input_size, hidden_size, device):
+        super(EmbeddingRNN, self).__init__()
+        self.hidden_size = hidden_size
+        self.device = device
+        self.gru = nn.GRUCell(input_size, hidden_size)
 
-    :returns keras.models.Model
-    """
+    def forward(self, input_tensor, hidden):
+        output = self.gru(input_tensor, hidden)
+        return output
 
-    inputs = Input(shape=(None, N_LETTERS))
-    lstm_two = Bidirectional(LSTM(128, recurrent_dropout=0.2))(inputs)
-    output = Dense(100)(lstm_two)
-    return Model(inputs=inputs, outputs=output)
+    def initHidden(self):
+        return torch.zeros(1, self.hidden_size, device=self.device)
+
+
+class AudioRNN(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size, device):
+        super(AudioRNN, self).__init__()
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+        self.device = device
+
+        self.gru = nn.GRUCell(input_size, hidden_size)
+        self.lin = nn.Linear(hidden_size, output_size)
+
+    def forward(self, input_tensor, hidden):
+        hidden = self.gru(input_tensor, hidden)
+        output = self.lin(hidden)
+        return output
+
+    def initHidden(self):
+        return torch.zeros(1, self.hidden_size, device=self.device)
