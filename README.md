@@ -1,4 +1,5 @@
 # SpeechGeneration
+[![Build Status](https://travis-ci.org/staturecrane/SpeechGeneration.svg?branch=master)](https://travis-ci.org/staturecrane/SpeechGeneration)
 
 Generating human-like speech using the LibriSpeech dataset and deep-learning libraries.
 
