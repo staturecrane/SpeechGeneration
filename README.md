@@ -1,8 +1,8 @@
 # SpeechGeneration
 [![Build Status](https://travis-ci.org/staturecrane/SpeechGeneration.svg?branch=master)](https://travis-ci.org/staturecrane/SpeechGeneration)
+[![Coverage Status](https://coveralls.io/repos/github/staturecrane/SpeechGeneration/badge.svg?branch=master)](https://coveralls.io/github/staturecrane/SpeechGeneration?branch=master)
 
 Generating human-like speech using the LibriSpeech dataset and deep-learning libraries.
-
 
 ## Installation 
 
