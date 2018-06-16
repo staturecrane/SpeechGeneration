@@ -7,6 +7,6 @@ install:
   - pip install --quiet -r requirements.txt
 # command to run tests
 script:
-  - pytest speech_generation/tests
+  - pytest --cov=speech_generation speech_generation/tests
 after_success:
   - coveralls
