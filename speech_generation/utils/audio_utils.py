@@ -1,4 +1,4 @@
-import tensorflow as tf
+import torchaudio
 from tensorflow.contrib.framework.python.ops import audio_ops as contrib_audio
 import os
 
@@ -13,18 +13,12 @@ def load_audio(filepath):
     Returns:
         (int, list): sample rate and list of audio samples
     """
-    audio_binary = tf.read_file(os.path.abspath(filepath))
-    desired_channels = 1
-    wav_decoder = contrib_audio.decode_wav(audio_binary,
-                                           desired_channels=desired_channels)
+    audio_binary, sample_rate = torchaudio.load(os.path.abspath(filepath))
+    return sample_rate, audio_binary
 
-    with tf.Session() as sess:
-        sample_rate, audio = sess.run([
-            wav_decoder.sample_rate,
-            wav_decoder.audio
-        ])
 
-        return sample_rate, audio
+def save_audio(outfile, sound, sample_rate):
+    torchaudio.save(os.path.abspath(outfile), sound, sample_rate)
 
 
 def chunk_audio(audio, chunksize=100):

@@ -2,8 +2,10 @@ import os
 import unicodedata
 
 from keras.utils import to_categorical
+import torch
 
-from ..config import ALL_LETTERS, N_LETTERS
+from speech_generation.config import ALL_LETTERS, N_LETTERS
+from speech_generation.utils.utils import merge_dicts
 
 
 def get_text_files(directory):
@@ -41,6 +43,10 @@ def get_filenames_and_text(textfile):
         return {filename: unicode_to_ascii(sample) for filename, sample in split_lines(lines)}
 
 
+def load_dataset(data_dir):
+    return merge_dicts(*[get_filenames_and_text(txt) for txt in get_text_files(data_dir)])
+
+
 def split_lines(lines):
     """
     Args:
@@ -65,3 +71,7 @@ def unicode_to_ascii(s):
 
 def convert_to_onehot(char):
     return to_categorical(ALL_LETTERS.index(char), num_classes=N_LETTERS)
+
+
+def get_input_vectors(line, device):
+    return torch.Tensor([convert_to_onehot(char) for char in line]).to(device)
