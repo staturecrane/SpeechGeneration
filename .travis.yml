@@ -2,6 +2,10 @@ language: python
 python:
   - "3.6"
 # command to install dependencies
+addons:
+  apt:
+    packages:
+      - gcc
 install:
   - pip install --quiet --upgrade setuptools pip
   - pip install --quiet torch torchvision
