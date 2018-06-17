@@ -5,7 +5,7 @@ python:
 addons:
   apt:
     packages:
-      - gcc
+      - gcc-c++
 install:
   - pip install --quiet --upgrade setuptools pip
   - pip install --quiet torch torchvision
