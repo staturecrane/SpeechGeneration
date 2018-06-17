@@ -3,6 +3,7 @@ python:
   - "3.6"
 # command to install dependencies
 install:
+  - pip install --quiet --upgrade setuptools pip
   - pip install --quiet torch torchvision
   - pip install --quiet -r requirements.txt
 # command to run tests
