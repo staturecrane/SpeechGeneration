@@ -20,13 +20,14 @@ class EmbeddingRNN(nn.Module):
 
 
 class AudioRNN(nn.Module):
-    def __init__(self, hidden_size, output_size, device):
+    def __init__(self, input_size, hidden_size, output_size, device):
         super(AudioRNN, self).__init__()
+        self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = output_size
         self.device = device
 
-        self.gru = nn.GRUCell(hidden_size, hidden_size)
+        self.gru = nn.GRUCell(input_size, hidden_size)
         self.lin = nn.Linear(hidden_size, output_size)
         self.lin_stop = nn.Linear(hidden_size, 1)
         self.sig = nn.Sigmoid()
@@ -37,7 +38,7 @@ class AudioRNN(nn.Module):
         output = self.lin(hidden)
         stop = self.lin_stop(hidden)
 
-        return self.tanh(output), self.sig(stop), hidden
+        return output, self.sig(stop), hidden
 
     def initHidden(self):
         return torch.zeros(1, self.hidden_size, device=self.device)
