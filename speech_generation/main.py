@@ -10,13 +10,25 @@ import yaml
 
 from speech_generation import config
 from speech_generation.utils import text_utils, audio_utils
-from speech_generation.speech_model.model import EmbeddingRNN, AudioRNN
+from speech_generation.speech_model.model import EmbeddingRNN, AudioCNN, Discriminator
 from speech_generation.speech_model.loader import LibriSpeech 
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 FACTOR = 2**31
 
 flatten = lambda l: torch.Tensor([item for sublist in l for item in sublist])
+
+
+def weights_init(m):
+    classname = m.__class__.__name__
+    if classname.find('Conv') != -1:
+        m.weight.data.normal_(0.0, 0.02)
+    elif classname.find('BatchNorm') != -1:
+        m.weight.data.normal_(1.0, 0.02)
+        m.bias.data.fill_(0)
+    elif classname.find('Linear') != -1:
+        m.weight.data.normal_(1.0, 0.02)
+        m.bias.data.fill_(0)
 
 
 def main(cfg_path): 
@@ -30,78 +42,90 @@ def main(cfg_path):
         raise 'No "dataset_dir" found in config'
 
     hidden_size = cfg.get('hidden_size', 128)
-    chunksize = cfg.get('chunksize', 400)
 
     dataset = LibriSpeech(data_dir, scale_factor=FACTOR)
     embedding_model = EmbeddingRNN(config.N_LETTERS, hidden_size, device=DEVICE).to(DEVICE)
-    audio_model = AudioRNN(chunksize, hidden_size, chunksize, device=DEVICE).to(DEVICE)
+    audio_model = AudioCNN(hidden_size, 8, 1).to(DEVICE)
+    discriminator = Discriminator(8, 1).to(DEVICE)
 
     params = list(embedding_model.parameters()) + list(audio_model.parameters())
-    optimizer = torch.optim.Adam(params, lr=0.01)
+    optimizer_g = torch.optim.Adam(params, lr=0.0001)
+    optimizer_d = torch.optim.SGD(discriminator.parameters(), lr=0.0001)
+
     mse = torch.nn.MSELoss()
     bce = torch.nn.BCELoss()
 
+    real_label = 1
+    fake_label = 0
+
+    err_d = 0
+    err_g = 0
+
     for epoch in range(100):
-        for sample_idx, (text, (sample_rate, audio)) in enumerate(dataset):
+        for sample_idx, (text, (sample_rate, audio_target)) in enumerate(dataset):
+            try:
+                audio_target = audio_utils.reshape_audio(audio_target, sample_rate).to(DEVICE)
+            except:
+                continue
+
             embedding_model.train()
             audio_model.train()
+            discriminator.train()
 
             embedding_model.zero_grad()
             audio_model.zero_grad()
+            discriminator.zero_grad()
 
-            chunked_audio = audio_utils.chunk_audio(audio, chunksize=chunksize)
             char_inputs = text_utils.get_input_vectors(text, DEVICE)
 
             embeddings = embedding_model.initHidden()
             for c_vector in char_inputs:
                 embeddings = embedding_model(c_vector.unsqueeze(0), embeddings)
 
-            hidden = embeddings
-            loss = 0
-            for i in range(len(chunked_audio)):
-                if i == 0:
-                    chunk = torch.zeros(chunksize).to(DEVICE)
-                else:
-                    chunk = chunked_audio[i-1].to(DEVICE).view(-1)
+            audio_output = audio_model(embeddings)
+            # loss = mse(audio_output, audio_target.unsqueeze(0))
 
-                chunk_target = chunked_audio[i].to(DEVICE).view(-1)
-                if len(chunk_target) < chunksize:
-                    new_chunk = torch.zeros(chunksize).to(DEVICE)
-                    for j in range(chunksize):
-                        try:
-                            new_chunk[j] = chunk_target[j]
-                        except IndexError:
-                            new_chunk[j] = 0
-                    chunk_target = new_chunk
+            d_output_real = discriminator(audio_target.view(1, 1, -1))
+            label = torch.full((1,), real_label, device=DEVICE)
+            d_error_real = bce(d_output_real, label)
 
-                chunk = chunk.unsqueeze(0)
-                chunk_target = chunk_target.unsqueeze(0)
-                output, stop, hidden = audio_model(chunk, hidden)
+            d_error_real.backward()
 
-                if i == len(chunked_audio) - 1:
-                    stop_target = torch.Tensor([1]).to(DEVICE).unsqueeze(0)
-                else:
-                    stop_target = torch.Tensor([0]).to(DEVICE).unsqueeze(0)
+            d_output_fake = discriminator(audio_output.detach())
+            label.fill_(fake_label)
+            d_error_fake = bce(d_output_fake, label)
+            d_error_fake.backward()
 
-                loss += 0.001 * mse(output, chunk_target) + bce(stop, stop_target)
+            err_d = d_error_real + d_error_fake
+            if sample_idx == 0 or err_g < err_d:
+                optimizer_d.step()
 
-            if sample_idx % cfg.get('print_iter', 100) == 0:
-                print(f"Sample {sample_idx}: {loss.mean() / len(chunked_audio)}")
+            label.fill_(real_label)
 
-            loss.backward()
-            optimizer.step()
+            output = discriminator(audio_output)
+            err_g = bce(output, label)
+            err_g.backward()
+            if sample_idx == 0 or err_d < err_g:
+                optimizer_g.step()
 
-            if sample_idx % cfg.get('save_iter', 100) == 0:
-                sample(embedding_model, audio_model, sample_rate, chunksize)
+            print(f"Epoch {epoch}, sample {sample_idx}: errG: {err_d}, errD: {err_g}")
 
-        with open('embedding_model.pt', 'wb') as embed_file:
-            torch.save(embedding_model, embed_file)
+            if sample_idx % cfg.get('sample_iter', 100) == 0:
+                sample(embedding_model, audio_model, sample_rate, epoch, sample_idx, cfg.get('out_folder'))
 
-        with open('audio_model.pt', 'wb') as audio_file:
-            torch.save(audio_model, audio_file)
+            
+            if sample_idx % cfg.get('save_iter', 1000) == 0:
+                with open('discriminator_model.pt', 'wb') as disc_file:
+                    torch.save(discriminator.state_dict(), disc_file)
+
+                with open('embedding_model.pt', 'wb') as embed_file:
+                    torch.save(embedding_model.state_dict(), embed_file)
+
+                with open('audio_model.pt', 'wb') as audio_file:
+                    torch.save(audio_model.state_dict(), audio_file)
 
 
-def sample(embedding_model, audio_model, sample_rate, chunksize, max_length=100):
+def sample(embedding_model, audio_model, sample_rate, epoch, sample_idx, outfolder):
     embedding_model.eval()
     audio_model.eval()
 
@@ -111,18 +135,8 @@ def sample(embedding_model, audio_model, sample_rate, chunksize, max_length=100)
     for c_vector in text:
         embeddings = embedding_model(c_vector.unsqueeze(0), embeddings)
 
-    audio_array = []
-    hidden = embeddings
-    output = torch.zeros(1, chunksize).to(DEVICE)
-    for _ in range(max_length):
-        output, stop, hidden = audio_model(output, hidden)
-        audio_array.append(output.data[0])
-        if stop.data[0] > 0.5:
-            break
-
-    audio_array = flatten(audio_array)
-    print(audio_array[0])
-    torchaudio.save('testaudio.wav', audio_array, sample_rate)
+    audio_output = audio_model(embeddings) * FACTOR
+    torchaudio.save("{}/{:06d}-{:06d}.wav".format(outfolder, epoch, sample_idx), audio_output.view(-1).cpu(), sample_rate)
 
 
 if __name__ == '__main__':
