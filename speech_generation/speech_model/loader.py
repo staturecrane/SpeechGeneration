@@ -20,4 +20,4 @@ class LibriSpeech(Dataset):
     def __getitem__(self, idx):
         filekey, sample = self.dataset[idx]
         sample_rate, audio = audio_utils.load_audio(f'{self.root_dir}/{filekey}.wav')
-        return sample, (sample_rate, audio)
+        return sample, (sample_rate, self.scale(audio))

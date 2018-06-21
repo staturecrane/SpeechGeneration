@@ -1,3 +1,5 @@
+import math
+
 import pytest
 import tensorflow as tf
 import torch
@@ -19,27 +21,10 @@ def audio():
     return audio_utils.load_audio(f'{TEST_DATA_DIR}/test.wav')
 
 
-def test_chunk_audio(audio):
+def test_reshape_audio(audio):
     sample_rate, audio = audio
-    chunksize = 100
-    chunked_audio = audio_utils.chunk_audio(audio, chunksize=chunksize)
-    if len(chunked_audio[-1]) < chunksize:
-        assert (len(audio) - len(chunked_audio[-1])) % chunksize == 0
-    else:
-        assert len(audio) % chunksize == 0
-
-    assert len(chunked_audio)
-
-
-def test_save_audio(audio):
-    sample_rate, audio = audio
-    chunksize = 100
-    chunked_audio = audio_utils.chunk_audio(audio, chunksize=chunksize)
-    new_audio = []
-    for x in chunked_audio:
-        for sample in x:
-            new_audio.append(sample)
-    audio_utils.save_audio('test_out.wav', torch.Tensor(new_audio), sample_rate)
+    reshaped_audio = audio_utils.reshape_audio(audio, sample_rate)
+    assert reshaped_audio.size(0) == int(math.sqrt((sample_rate * 16.384)))
 
 
 def test_create_dataset():
