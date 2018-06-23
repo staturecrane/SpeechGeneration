@@ -24,7 +24,7 @@ def save_audio(outfile, sound, sample_rate):
     torchaudio.save(os.path.abspath(outfile), sound, sample_rate)
 
 
-def reshape_audio(audio_tensor, hz, max_time=20):
+def reshape_audio(audio_tensor, hz, max_time=2):
     max_length = int(hz * max_time)
     audio_tensor = audio_tensor.view(-1)
     if len(audio_tensor) < max_length:
@@ -38,3 +38,4 @@ def reshape_audio(audio_tensor, hz, max_time=20):
     elif len(audio_tensor) > max_length:
         audio_tensor = audio_tensor[:max_length]
     return audio_tensor
+
