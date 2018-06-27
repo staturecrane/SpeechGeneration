@@ -4,6 +4,7 @@ import sys
 sys.path.append('.')
 
 import torch
+import torch.autograd as autograd
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 import torchaudio
@@ -17,18 +18,6 @@ from speech_generation.speech_model.loader import LibriSpeech
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 FACTOR = 2**31
-
-
-def weights_init(m):
-    classname = m.__class__.__name__
-    if classname.find('Conv') != -1:
-        m.weight.data.normal_(0.0, 0.02)
-    elif classname.find('BatchNorm') != -1:
-        m.weight.data.normal_(1.0, 0.02)
-        m.bias.data.fill_(0)
-    elif classname.find('Linear') != -1:
-        m.weight.data.normal_(1.0, 0.02)
-        m.bias.data.fill_(0)
 
 
 def main(cfg_path):
@@ -45,12 +34,12 @@ def main(cfg_path):
 
     dataset = LibriSpeech(data_dir, scale_factor=FACTOR)
     embedding_model = EmbeddingRNN(config.N_LETTERS, hidden_size, device=DEVICE).to(DEVICE)
-    audio_model = AudioCNN(hidden_size, 2, 1).to(DEVICE)
-    discriminator = Discriminator(2, 1).to(DEVICE)
+    audio_model = AudioCNN(hidden_size, 16, 1).to(DEVICE)
+    discriminator = Discriminator(16, 1).to(DEVICE)
 
     params = list(embedding_model.parameters()) + list(audio_model.parameters())
-    optimizer_g = torch.optim.Adam(params, lr=0.0001)
-    optimizer_d = torch.optim.Adam(discriminator.parameters(), lr=0.0001)
+    optimizer_g = torch.optim.RMSprop(params, lr=1e-3)
+    optimizer_d = torch.optim.RMSprop(discriminator.parameters(), lr=1e-3)
 
     mse = torch.nn.MSELoss()
     bce = torch.nn.BCELoss()
@@ -58,22 +47,11 @@ def main(cfg_path):
     real_label = 1
     fake_label = 0
 
-    one = torch.FloatTensor([1]).to(DEVICE)
-    mone = one * -1
-
     err_d = 0
     err_g = 0
-    critic_iters = cfg.get('critic_iters', 5)
 
     for epoch in range(100):
-        # for sample_idx, (text, (sample_rate, audio_target)) in enumerate(dataset):
         for sample_idx in range(len(dataset)):
-            text, (sample_rate, audio_target) = random.choice(dataset)
-            try:
-                audio_target = audio_utils.reshape_audio(audio_target, sample_rate).to(DEVICE)
-            except:
-                continue
-
             embedding_model.train()
             audio_model.train()
             discriminator.train()
@@ -82,8 +60,15 @@ def main(cfg_path):
             audio_model.zero_grad()
             discriminator.zero_grad()
 
-            for p in discriminator.parameters():
-                p.requires_grad_(False) # freeze D
+            text, (sample_rate, audio_target) = random.choice(dataset)
+            try:
+                audio_target = audio_utils.reshape_audio(audio_target, sample_rate).to(DEVICE)
+            except Exception as e:
+                print(e)
+                continue
+
+            for param in discriminator.parameters():
+                param.requires_grad = True
 
             char_inputs = text_utils.get_input_vectors(text, DEVICE)
 
@@ -93,54 +78,41 @@ def main(cfg_path):
 
             audio_output = audio_model(embeddings)
 
-            output = discriminator(audio_output)
-            err_g = output.mean().view(1, -1)
-            err_g.backward(mone)
-            # err_g = bce(output, label)
-            err_g = -err_g
-            # if sample_idx == 0 or err_d < err_g:
+            real_audio_target = torch.cat((audio_target, audio_target), 0).view(1, 1, -1)
+
+            hidden_real, d_output_real = discriminator(real_audio_target)
+            label = torch.full((1,), real_label, device=DEVICE)
+            # d_error_real = bce(d_output_real, label)
+            d_error_real = 0.5 * torch.mean((d_output_real - label)**2)
+            fake_audio_target = torch.cat((audio_output.detach, audio_target.view(1, 1, -1)), 2)
+            _, d_output_fake = discriminator(fake_audio_target.detach())
+
+            label = torch.full((1,), fake_label, device=DEVICE)
+            # d_error_fake = bce(d_output_fake, label)
+            d_error_fake = 0.5 * torch.mean((d_output_fake - label)**2)
+
+            err_d = d_error_real + d_error_fake
+            err_d.backward()
+            optimizer_d.step()
+
+            for param in discriminator.parameters():
+                param.requires_grad = False
+
+            hidden_fake, gen_output = discriminator(fake_audio_target)
+            # err_g = mse(hidden_fake, hidden_real.detach())
+            label = torch.full((1,), real_label, device=DEVICE)
+            err_g = 0.5 * torch.mean((gen_output - label)**2)
+            err_g.backward()
             optimizer_g.step()
 
-            for p in discriminator.parameters():
-                p.requires_grad_(True) # unfreeze D
-
-            for j in range(1, critic_iters):
-                text, (sample_rate, audio_target) = random.choice(dataset)
-                try:
-                    audio_target = audio_utils.reshape_audio(audio_target, sample_rate).to(DEVICE)
-                except:
-                    continue
-
-                with torch.no_grad():
-                    char_inputs = text_utils.get_input_vectors(text, DEVICE)
-
-                    embeddings = embedding_model.initHidden()
-                    for c_vector in char_inputs:
-                        embeddings = embedding_model(c_vector.unsqueeze(0), embeddings)
-
-                    audio_output = audio_model(embeddings)
-
-                d_output_real = discriminator(audio_target.view(1, 1, -1))
-                # label = torch.full((1,), real_label, device=DEVICE)
-                # d_error_real = bce(d_output_real, label)
-
-                # d_error_real.backward(retain_graph=True)
-                d_output_fake = discriminator(audio_output.detach())
-                # label.fill_(fake_label)
-                # d_error_fake = bce(d_output_fake, label)
-                # d_error_fake.backward()
-
-                err_d = d_output_fake - d_output_real
-                err_d.backward()
-                # if sample_idx == 0 or err_g < err_d:
-                optimizer_d.step()
-                for param in discriminator.parameters():
-                    param.data.clamp_(-0.1, 0.1)
+            # output, _ = discriminator(audio_output)
+            # label = torch.full((1,), real_label, device=DEVICE)
+            # err_g = mse(output, label)
+            # err_g.backward()
 
             if sample_idx % cfg.get('sample_iter', 100) == 0:
-                print(f"Epoch {epoch}, sample {sample_idx}: errG: {err_d.mean().item()}, errD: {err_g.mean().item()}")
-                # print(f"Epoch {epoch}, sample {sample_idx}: {loss.mean().item()}")
-                sample(embedding_model, audio_model, sample_rate, epoch, sample_idx, cfg.get('out_folder'))
+                print(f"Epoch {epoch}, sample {sample_idx}: errG: {err_g.mean().item()}, errD: {err_d.mean().item()}")
+                sample(embedding_model, audio_model, sample_rate, epoch, sample_idx, cfg.get('out_folder'), hidden_size)
 
 
             if sample_idx % cfg.get('save_iter', 1000) == 0:
@@ -154,7 +126,7 @@ def main(cfg_path):
                     torch.save(audio_model.state_dict(), audio_file)
 
 
-def sample(embedding_model, audio_model, sample_rate, epoch, sample_idx, outfolder):
+def sample(embedding_model, audio_model, sample_rate, epoch, sample_idx, outfolder, hidden_size):
     embedding_model.eval()
     audio_model.eval()
 
@@ -170,4 +142,3 @@ def sample(embedding_model, audio_model, sample_rate, epoch, sample_idx, outfold
 
 if __name__ == '__main__':
     main(sys.argv[1])
-
