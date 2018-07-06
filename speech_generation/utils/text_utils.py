@@ -73,5 +73,11 @@ def convert_to_onehot(char):
     return to_categorical(ALL_LETTERS.index(char), num_classes=N_LETTERS)
 
 
-def get_input_vectors(line, device):
-    return torch.Tensor([convert_to_onehot(char) for char in line]).to(device)
+def get_input_vectors(line, max_length=400):
+    one_hot = [convert_to_onehot(char) for char in line]
+    if len(one_hot) < max_length:
+        for i in range(max_length - len(one_hot)):
+            one_hot.append(convert_to_onehot(unicode_to_ascii(' ')))
+    if len(one_hot) > max_length:
+        one_hot = one_hot[:max_length]
+    return torch.LongTensor(one_hot)

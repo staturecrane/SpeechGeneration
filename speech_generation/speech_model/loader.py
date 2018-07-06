@@ -1,13 +1,25 @@
 import random
 
+import torch
 from torch.utils.data import Dataset
 import torchaudio.transforms as transform
 
 from speech_generation.utils import audio_utils, text_utils
 
 
+def split_and_gender(text):
+    data = text.split('|')
+    return data[0].strip(), 0 if data[1].strip() == 'M' else 1
+
+
 class LibriSpeech(Dataset):
-    def __init__(self, root_dir, scale_factor=2**31):
+    def __init__(self, root_dir, device, max_length=400, scale_factor=2**31):
+        self.device = device
+        self.max_length = max_length
+
+        speakers = open(f'{root_dir}/SPEAKERS.TXT').readlines()
+        self.speaker_dict = {key: value for key, value in list(map(lambda x: split_and_gender(x), speakers))}
+
         dataset = text_utils.load_dataset(root_dir)
         self.dataset = [(key, value) for key, value in dataset.items()]
         self.root_dir = root_dir
@@ -19,5 +31,12 @@ class LibriSpeech(Dataset):
 
     def __getitem__(self, idx):
         filekey, sample = self.dataset[idx]
+        speaker = filekey.split('-')[0]
         sample_rate, audio = audio_utils.load_audio(f'{self.root_dir}/{filekey}.wav')
-        return sample, (sample_rate, self.scale(audio))
+        audio = self.scale(audio)
+
+        char_inputs = text_utils.get_input_vectors(sample, max_length=self.max_length)
+        audio_target = audio_utils.reshape_audio(audio, sample_rate).view(1, -1)
+        speaker_target = self.speaker_dict[speaker]
+        return audio_target, speaker_target, char_inputs
+
