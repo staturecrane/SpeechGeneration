@@ -115,9 +115,12 @@ def main(cfg_path):
         encoder_scheduler.step()
         decoder_scheduler.step()
 
+
 def sample(encoder, decoder, max_length):
     with torch.no_grad():
-        text = text_utils.get_input_vectors(text_utils.unicode_to_ascii("I'M SORRY DAVE I'M AFRAID I CAN'T DO THAT")).to(DEVICE)
+        text = text_utils.get_input_vectors(
+            text_utils.unicode_to_ascii("I'M SORRY DAVE I'M AFRAID I CAN'T DO THAT")
+        ).to(DEVICE)
         text = text.unsqueeze(0)
 
         encoder_hidden = encoder.initHidden()
@@ -141,6 +144,7 @@ def sample(encoder, decoder, max_length):
             decoded_words.append(config.ALL_LETTERS[topi[0][0]])
     
     print(' '.join(decoded_words))
+
 
 if __name__ == '__main__':
     main(sys.argv[1])

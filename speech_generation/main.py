@@ -112,7 +112,7 @@ def sample(embedding_model, audio_model, sample_rate, epoch, sample_idx, outfold
 
     hidden = torch.zeros(1, 1, hidden_size).to(DEVICE)
     embeddings, hidden = embedding_model(text.unsqueeze(0), hidden)
-    audio_output = audio_model(hidden.view(1, hidden_size))
+    audio_output = audio_model(embeddings)
 
     torchaudio.save("{}/{:06d}-{:06d}.wav".format(outfolder, epoch, sample_idx), audio_output.view(-1).cpu(), sample_rate)
 

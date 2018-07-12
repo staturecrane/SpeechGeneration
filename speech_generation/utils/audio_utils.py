@@ -1,5 +1,6 @@
 import math
 import os
+import random 
 
 import torch
 import torchaudio
@@ -24,7 +25,7 @@ def save_audio(outfile, sound, sample_rate):
     torchaudio.save(os.path.abspath(outfile), sound, sample_rate)
 
 
-def reshape_audio(audio_tensor, hz, max_time=2):
+def reshape_audio(audio_tensor, hz, max_time=2, randomize=False):
     max_length = int(hz * max_time)
     audio_tensor = audio_tensor.view(-1)
     if len(audio_tensor) < max_length:
@@ -36,6 +37,10 @@ def reshape_audio(audio_tensor, hz, max_time=2):
                 new_audio[i] = 0
         audio_tensor = new_audio
     elif len(audio_tensor) > max_length:
-        audio_tensor = audio_tensor[:max_length]
+        if randomize:
+            max_idx = len(audio_tensor) - max_length - 1
+            start_point = random.randint(0, max_idx)
+            audio_tensor = audio_tensor[start_point: start_point + max_length]
+        else:
+            audio_tensor = audio_tensor[:max_length]
     return audio_tensor
-

@@ -64,7 +64,7 @@ class AttnDecoderRNN(nn.Module):
 class AudioCNN(nn.Module):
     def __init__(self, nz, nf, nc):
         super(AudioCNN, self).__init__()
-        self.in_layer = nn.Linear(nz, 235)
+        self.in_layer = nn.Linear(nz, 610)
         self.main = torch.nn.Sequential(
             torch.nn.ConvTranspose1d(1, nf*64, 4, 1, 0, dilation=3, bias=False),
             torch.nn.BatchNorm1d(nf * 64),
@@ -93,10 +93,11 @@ class AudioCNN(nn.Module):
 
     def forward(self, input):
         i2h = self.in_layer(input)
-        return self.main(i2h.view(i2h.size(0), 1, i2h.size(1)))
+        i2h = i2h.view(input.size(0), 1, -1)
+        return self.main(i2h)
 
 
-class Discriminator(nn.Module):
+class Classifier(nn.Module):
     def __init__(self, nf, nc):
         super(Discriminator, self).__init__()
         self.one = torch.nn.Sequential(
@@ -124,10 +125,47 @@ class Discriminator(nn.Module):
             torch.nn.LeakyReLU(0.2, inplace=True),
             torch.nn.Conv1d(nf*64, 1, 4, 1, 0, bias=False, dilation=3)
         )
-        self.out_layer = nn.Linear(235, 2)
-        self.sig = nn.Softmax(0)
+        self.out_layer = nn.Linear(610, 2484)
+        self.soft = nn.Softmax()
 
     def forward(self, input):
         one = self.one(input)
         output = self.two(one)
         return one, self.out_layer(output.view(output.size(0), -1))
+
+
+class Discriminator(nn.Module):
+    def __init__(self, nf, nc):
+        super(Discriminator, self).__init__()
+        self.one = torch.nn.Sequential(
+            torch.nn.Conv1d(1, nf, 4, 2, 1, dilation=3, bias=False),
+            torch.nn.LeakyReLU(0.2, inplace=True),
+            torch.nn.Conv1d(nf, nf*2, 4, 2, 1, dilation=3, bias=False),
+            torch.nn.BatchNorm1d(nf * 2),
+            torch.nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.two = torch.nn.Sequential(
+            torch.nn.Conv1d(nf*2, nf*4, 4, 2, 1, dilation=3, bias=False),
+            torch.nn.BatchNorm1d(nf * 4),
+            torch.nn.LeakyReLU(0.2, inplace=True),
+            torch.nn.Conv1d(nf*4, nf*8, 4, 2, 1, dilation=3, bias=False),
+            torch.nn.BatchNorm1d(nf * 8),
+            torch.nn.LeakyReLU(0.2, inplace=True),
+            torch.nn.Conv1d(nf*8, nf*16, 4, 2, 1, dilation=3, bias=False),
+            torch.nn.BatchNorm1d(nf * 16),
+            torch.nn.LeakyReLU(0.2, inplace=True),
+            torch.nn.Conv1d(nf*16, nf*32, 4, 2, 1, dilation=3, bias=False),
+            torch.nn.BatchNorm1d(nf * 32),
+            torch.nn.LeakyReLU(0.2, inplace=True),
+            torch.nn.Conv1d(nf*32, nf*64, 4, 2, 1, dilation=3, bias=False),
+            torch.nn.BatchNorm1d(nf * 64),
+            torch.nn.LeakyReLU(0.2, inplace=True),
+            torch.nn.Conv1d(nf*64, 1, 4, 1, 0, bias=False, dilation=3)
+        )
+        self.out_layer = nn.Linear(610, 1)
+        self.sig = torch.nn.Sigmoid()
+
+    def forward(self, input):
+        one = self.one(input)
+        output = self.two(one)
+        return one, self.sig(self.out_layer(output.view(output.size(0), -1)))
