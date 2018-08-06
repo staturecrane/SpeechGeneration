@@ -8,6 +8,13 @@ import torchaudio.transforms as transform
 from speech_generation.utils import audio_utils, text_utils
 
 
+def normalize_audio(raw_audio):
+    minval = raw_audio.min()
+    maxval = raw_audio.max()
+    audio = (((raw_audio - minval) / float(maxval - minval)) - 0.5) * 2.0
+    return audio
+
+
 class LibriSpeech(Dataset):
     def __init__(self, root_dir, device, max_time=5, max_length=400, scale_factor=2**31, randomize_speaker_samples=False):
         self.device = device
@@ -31,8 +38,7 @@ class LibriSpeech(Dataset):
         speaker = filekey.split('-')[0]
         speaker_idx = self.speaker_dict[speaker]
         sample_rate, audio = audio_utils.load_audio(f'{self.root_dir}/{filekey}.wav')
-        audio = self.scale(audio)
-
+        audio = normalize_audio(audio)
         char_inputs = text_utils.get_input_vectors(sample, max_length=self.max_length)
         audio_target = audio_utils.reshape_audio(audio, sample_rate, max_time=self.max_time, randomize=self.randomize_speaker_samples).view(1, -1)
         return audio_target, speaker_idx, char_inputs

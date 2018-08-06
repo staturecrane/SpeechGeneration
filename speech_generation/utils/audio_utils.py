@@ -1,6 +1,6 @@
 import math
 import os
-import random 
+import random
 
 import torch
 import torchaudio
@@ -17,7 +17,7 @@ def load_audio(filepath):
     Returns:
         (int, list): sample rate and list of audio samples
     """
-    audio_binary, sample_rate = torchaudio.load(os.path.abspath(filepath))
+    audio_binary, sample_rate = torchaudio.load(os.path.abspath(filepath), normalization=True)
     return sample_rate, audio_binary
 
 

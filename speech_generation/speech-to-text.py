@@ -13,7 +13,7 @@ import yaml
 
 from speech_generation import config
 from speech_generation.utils import text_utils, audio_utils
-from speech_generation.speech_model.model import EncoderRNN, AttnDecoderRNN, AudioCNN
+from speech_generation.speech_model.model import Encoder, AttnDecoderRNN
 from speech_generation.speech_model.loader import LibriSpeech
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -38,21 +38,17 @@ def main(cfg_path):
     dataset = LibriSpeech(data_dir, DEVICE, scale_factor=FACTOR, max_length=max_length)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 
-    encoder = EncoderRNN(config.N_LETTERS, hidden_size, DEVICE).to(DEVICE)
+    Encoder = Encoder(128, 1).to(DEVICE)
     decoder = AttnDecoderRNN(hidden_size, config.N_LETTERS, DEVICE, max_length=max_length).to(DEVICE)
     teacher_forcing_ratio = 0.5
 
-    encoder_optimizer = torch.optim.RMSprop(encoder.parameters(), lr=learning_rate)
     decoder_optimizer = torch.optim.RMSprop(decoder.parameters(), lr=learning_rate)
-    
-    encoder_scheduler = torch.optim.lr_scheduler.StepLR(encoder_optimizer, step_size=3, gamma=0.1)
-    decoder_scheduler = torch.optim.lr_scheduler.StepLR(decoder_optimizer, step_size=3, gamma=0.1)
 
     criterion = torch.nn.NLLLoss()
 
     for epoch in range(100):
-        for sample_idx, (_, _, text) in enumerate(dataloader):
-            text = text.to(DEVICE)
+        for sample_idx, (audio, _, text) in enumerate(dataloader):
+            audio, text = audio.to(DEVICE), text.to(DEVICE)
 
             encoder.train()
             decoder.train()
@@ -61,24 +57,12 @@ def main(cfg_path):
             decoder.zero_grad()
 
             encoder_hidden = encoder.initHidden()
-
-            encoder_optimizer.zero_grad()
             decoder_optimizer.zero_grad()
 
-            encoder_outputs = torch.zeros(max_length, encoder.hidden_size, device=DEVICE)
-
-            loss = 0
-
-            for ei in range(max_length):
-                encoder_output, encoder_hidden = encoder(
-                    text[:, ei], encoder_hidden)
-                encoder_outputs[ei] = encoder_output[0, 0]
-
             decoder_input = torch.tensor([[SOS_token]], device=DEVICE)
-
             decoder_hidden = encoder_hidden
 
-            use_teacher_forcing = False # True if random.random() < teacher_forcing_ratio else False
+            use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
 
             if use_teacher_forcing:
                 # Teacher forcing: Feed the target as the next input
@@ -142,7 +126,7 @@ def sample(encoder, decoder, max_length):
             topv, topi = decoder_output.topk(1)
             decoder_input = topi.detach()  # detach from history as input
             decoded_words.append(config.ALL_LETTERS[topi[0][0]])
-    
+
     print(' '.join(decoded_words))
 
 

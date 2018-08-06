@@ -13,7 +13,7 @@ import yaml
 
 from speech_generation import config
 from speech_generation.utils import text_utils, audio_utils
-from speech_generation.speech_model.model import EncoderRNN, AudioCNN, Discriminator
+from speech_generation.speech_model.model import Classifier
 from speech_generation.speech_model.loader import LibriSpeech
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -38,18 +38,18 @@ def main(cfg_path):
     dataset = LibriSpeech(data_dir, DEVICE, scale_factor=FACTOR, max_time=max_time, max_length=max_length, randomize_speaker_samples=True)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 
-    discriminator = Discriminator(64, 1).to(DEVICE)
-    optimizer_d = torch.optim.Adam(discriminator.parameters(), lr=learning_rate)
+    classifier = Classifier(128, 1).to(DEVICE)
+    optimizer_d = torch.optim.Adam(classifier.parameters(), lr=learning_rate)
     criterion = torch.nn.CrossEntropyLoss()
 
     for epoch in range(100):
         for sample_idx, (audio, gender, text) in enumerate(dataloader):
             audio, gender, text = audio.to(DEVICE), gender.to(DEVICE), text.to(DEVICE)
 
-            discriminator.train()
-            discriminator.zero_grad()
+            classifier.train()
+            classifier.zero_grad()
 
-            _, d_output_real = discriminator(audio)
+            _, d_output_real = classifier(audio)
             err_d = criterion(d_output_real, gender)
             err_d.backward()
 
@@ -59,8 +59,8 @@ def main(cfg_path):
                 print(f"Epoch {epoch}, sample {sample_idx}: errD: {err_d.item()}")
 
             if sample_idx % cfg.get('save_iter', 1000) == 0:
-                with open('discriminator.pt', 'wb') as audio_file:
-                    torch.save(discriminator.state_dict(), audio_file)
+                with open('classifier.pt', 'wb') as audio_file:
+                    torch.save(classifier.state_dict(), audio_file)
 
 
 if __name__ == '__main__':
