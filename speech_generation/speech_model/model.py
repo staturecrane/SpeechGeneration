@@ -71,19 +71,15 @@ class AudioCNN(nn.Module):
             torch.nn.ConvTranspose1d(nf*64, nf*32, 4, 2, 1, bias=False),
             torch.nn.BatchNorm1d(nf * 32),
             torch.nn.LeakyReLU(0.2, inplace=True),
-            torch.nn.Dropout(0.2),
             torch.nn.ConvTranspose1d(nf*32, nf*16, 4, 2, 1, bias=False),
             torch.nn.BatchNorm1d(nf * 16),
             torch.nn.LeakyReLU(0.2, inplace=True),
-            torch.nn.Dropout(0.2),
             torch.nn.ConvTranspose1d(nf*16, nf*8, 4, 2, 1, bias=False),
             torch.nn.BatchNorm1d(nf * 8),
             torch.nn.LeakyReLU(0.2, inplace=True),
-            torch.nn.Dropout(0.2),
             torch.nn.ConvTranspose1d(nf*8, nf*4, 4, 2, 1, bias=False),
             torch.nn.BatchNorm1d(nf * 4),
             torch.nn.LeakyReLU(0.2, inplace=True),
-            torch.nn.Dropout(0.2),
             torch.nn.ConvTranspose1d(nf*4, nf*2, 4, 2, 1, bias=False),
             torch.nn.BatchNorm1d(nf * 2),
             torch.nn.LeakyReLU(0.2, inplace=True),
@@ -172,19 +168,15 @@ class Discriminator(nn.Module):
             torch.nn.Conv1d(nf*2, nf*4, 4, 2, 1, bias=False),
             torch.nn.BatchNorm1d(nf * 4),
             torch.nn.LeakyReLU(0.2, inplace=True),
-            torch.nn.Dropout(0.2),
             torch.nn.Conv1d(nf*4, nf*8, 4, 2, 1, bias=False),
             torch.nn.BatchNorm1d(nf * 8),
             torch.nn.LeakyReLU(0.2, inplace=True),
-            torch.nn.Dropout(0.2),
             torch.nn.Conv1d(nf*8, nf*16, 4, 2, 1, bias=False),
             torch.nn.BatchNorm1d(nf * 16),
             torch.nn.LeakyReLU(0.2, inplace=True),
-            torch.nn.Dropout(0.2),
             torch.nn.Conv1d(nf*16, nf*32, 4, 2, 1, bias=False),
             torch.nn.BatchNorm1d(nf * 32),
             torch.nn.LeakyReLU(0.2, inplace=True),
-            torch.nn.Dropout(0.2),
             torch.nn.Conv1d(nf*32, nf*64, 4, 2, 1, bias=False),
             torch.nn.BatchNorm1d(nf * 64),
             torch.nn.LeakyReLU(0.2, inplace=True),
@@ -195,7 +187,7 @@ class Discriminator(nn.Module):
 
     def forward(self, input):
         output = self.main(input)
-        return self.sig(self.out_layer(output.view(output.size(0), -1)))
+        return self.out_layer(output.view(output.size(0), -1))
 
 
 class Encoder(nn.Module):

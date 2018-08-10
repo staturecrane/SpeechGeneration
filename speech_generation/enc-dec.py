@@ -51,13 +51,13 @@ def main(cfg_path):
 
     test_dataset = LibriSpeech(data_dir, DEVICE, scale_factor=FACTOR, max_time=max_time, max_length=max_length)
 
-    discriminator = Discriminator(128, 1).to(DEVICE)
-    encoder = Encoder(64, 1).to(DEVICE)
-    decoder = Decoder(hidden_size, 64, 1).to(DEVICE)
+    discriminator = Discriminator(16, 1).to(DEVICE)
+    encoder = Encoder(16, 1).to(DEVICE)
+    decoder = Decoder(hidden_size, 16, 1).to(DEVICE)
 
     parameters = list(encoder.parameters()) + list(decoder.parameters())
-    optimizer_g = torch.optim.Adam(parameters, lr=1e-4)
-    optimizer_d = torch.optim.Adam(discriminator.parameters(), lr=1e-6)
+    optimizer_g = torch.optim.Adam(parameters, lr=2e-4)
+    optimizer_d = torch.optim.Adam(discriminator.parameters(), lr=2e-4)
 
     bce = torch.nn.BCELoss()
     mse = torch.nn.L1Loss()
@@ -89,22 +89,15 @@ def main(cfg_path):
 
             label = torch.full((batch_size,), real_label, device=DEVICE)
             d_output_real = discriminator(audio)
-            err_d_real = bce(d_output_real.view(batch_size, -1), label)
-            # err_d_real = 0.5 * torch.mean((d_output_real - label)**2)
-            # if (sample_idx == epoch == 0) or err_d > 0.6:
-            err_d_real.backward()
+            err_d_real = mse(d_output_real.view(batch_size), label)
 
             label = torch.full((batch_size,), fake_label, device=DEVICE)
-            d_output_fake = discriminator(audio_output.detach()).view(batch_size, -1)
-            err_d_fake = bce(d_output_fake.view(batch_size, -1), label)
-            # err_d_fake = 0.5 * torch.mean((d_output_fake - label)**2)
+            d_output_fake = discriminator(audio_output.detach())
+            err_d_fake = mse(d_output_fake.view(batch_size), label)
 
-            # if (sample_idx == epoch == 0) or err_d > 0.6:
-            err_d_fake.backward()
+            err_d = (err_d_real + err_d_fake) * 0.5
+            err_d.backward()
 
-            err_d = err_d_real + err_d_fake
-
-            # if (sample_idx == epoch == 0) or err_d > 0.6:
             optimizer_d.step()
 
             for param in discriminator.parameters():
@@ -112,9 +105,8 @@ def main(cfg_path):
 
             label = torch.full((batch_size,), real_label, device=DEVICE)
             gen_output = discriminator(audio_output)
-            err_g = bce(gen_output.view(batch_size, -1), label) + (mse(audio_output, audio) * 10.0)
+            err_g = mse(gen_output.view(batch_size), label) + (mse(audio_output, audio) * 5.0)
 
-            # if (sample_idx == epoch == 0) or err_g > 0.3:
             err_g.backward()
             optimizer_g.step()
 
