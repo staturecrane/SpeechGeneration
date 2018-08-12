@@ -100,20 +100,27 @@ class Decoder(nn.Module):
     def __init__(self, nz, nf, nc):
         super(Decoder, self).__init__()
         self.main = torch.nn.Sequential(
-            torch.nn.ConvTranspose1d(1, nf*64, 4, 1, 0, bias=False),
-            torch.nn.BatchNorm1d(nf * 64),
-            torch.nn.ConvTranspose1d(nf*64, nf*32, 4, 2, 1, bias=False),
-            torch.nn.BatchNorm1d(nf * 32),
-            torch.nn.ConvTranspose1d(nf*32, nf*16, 4, 2, 1, bias=False),
+            # torch.nn.ConvTranspose1d(1, nf*64, 4, 1, 0, bias=False),
+            # torch.nn.BatchNorm1d(nf * 64),
+            # torch.nn.LeakyReLU(0.2, inplace=True),
+            # torch.nn.ConvTranspose1d(1, nf*32, 4, 2, 1, bias=False),
+            # torch.nn.BatchNorm1d(nf * 32),
+            # torch.nn.LeakyReLU(0.2, inplace=True),
+            torch.nn.ConvTranspose1d(1, nf*16, 4, 2, 1, bias=False),
             torch.nn.BatchNorm1d(nf * 16),
+            torch.nn.LeakyReLU(0.2, inplace=True),
             torch.nn.ConvTranspose1d(nf*16, nf*8, 4, 2, 1, bias=False),
             torch.nn.BatchNorm1d(nf * 8),
+            torch.nn.LeakyReLU(0.2, inplace=True),
             torch.nn.ConvTranspose1d(nf*8, nf*4, 4, 2, 1, bias=False),
             torch.nn.BatchNorm1d(nf * 4),
+            torch.nn.LeakyReLU(0.2, inplace=True),
             torch.nn.ConvTranspose1d(nf*4, nf*2, 4, 2, 1, bias=False),
             torch.nn.BatchNorm1d(nf * 2),
+            torch.nn.LeakyReLU(0.2, inplace=True),
             torch.nn.ConvTranspose1d(nf*2, nf, 4, 2, 1, bias=False),
             torch.nn.BatchNorm1d(nf),
+            torch.nn.LeakyReLU(0.2, inplace=True),
             torch.nn.ConvTranspose1d(nf, 1, 4, 2, 1, bias=False),
             torch.nn.Tanh()
         )
@@ -211,14 +218,14 @@ class Encoder(nn.Module):
             torch.nn.BatchNorm1d(nf * 16),
             torch.nn.LeakyReLU(0.2, inplace=True),
             torch.nn.Dropout(0.2),
-            torch.nn.Conv1d(nf*16, nf*32, 4, 2, 1, bias=False),
-            torch.nn.BatchNorm1d(nf * 32),
-            torch.nn.LeakyReLU(0.2, inplace=True),
-            torch.nn.Dropout(0.2),
-            torch.nn.Conv1d(nf*32, nf*64, 4, 2, 1, bias=False),
-            torch.nn.BatchNorm1d(nf * 64),
-            torch.nn.LeakyReLU(0.2, inplace=True),
-            torch.nn.Conv1d(nf*64, 1, 4, 1, 0, bias=False, )
+            torch.nn.Conv1d(nf*16, 1, 4, 2, 1, bias=False),
+            # torch.nn.BatchNorm1d(nf * 32),
+            # torch.nn.LeakyReLU(0.2, inplace=True),
+            # torch.nn.Dropout(0.2),
+            # torch.nn.Conv1d(nf*32, nf*64, 4, 2, 1, bias=False),
+            # torch.nn.BatchNorm1d(nf * 64),
+            # torch.nn.LeakyReLU(0.2, inplace=True),
+            # torch.nn.Conv1d(nf*64, 1, 4, 1, 0, bias=False, )
         )
 
     def forward(self, input):

@@ -51,9 +51,9 @@ def main(cfg_path):
 
     test_dataset = LibriSpeech(data_dir, DEVICE, scale_factor=FACTOR, max_time=max_time, max_length=max_length)
 
-    discriminator = Discriminator(16, 1).to(DEVICE)
-    encoder = Encoder(16, 1).to(DEVICE)
-    decoder = Decoder(hidden_size, 16, 1).to(DEVICE)
+    discriminator = Discriminator(64, 1).to(DEVICE)
+    encoder = Encoder(64, 1).to(DEVICE)
+    decoder = Decoder(hidden_size, 64, 1).to(DEVICE)
 
     parameters = list(encoder.parameters()) + list(decoder.parameters())
     optimizer_g = torch.optim.Adam(parameters, lr=2e-4)
