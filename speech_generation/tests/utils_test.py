@@ -23,7 +23,3 @@ def test_load_text():
 
     vectors = text_utils.get_input_vectors(sentence, max_length=max_length)
     assert len(vectors) == max_length
-    # confirm padded long elements equal N_LETTERS - 1
-    assert all(filter(lambda x: x == N_LETTERS - 1, vectors[sen_length:]))
-    reconstructed = [ALL_LETTERS[idx] for idx in vectors[:sen_length]]
-    assert ''.join(reconstructed) == sentence
