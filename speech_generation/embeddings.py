@@ -23,7 +23,8 @@ SOS_token = config.N_LETTERS - 1
 def main(cfg_path):
     cfg_file = open(os.path.abspath(cfg_path))
     cfg = yaml.load(cfg_file.read())
-    data_dir = cfg.get('dataset_dir')
+    data_dir = cfg.get('data')
+    test_data_dir = cfg.get('test-data')
 
     try:
         assert data_dir
@@ -32,19 +33,20 @@ def main(cfg_path):
 
     hidden_size = cfg.get('hidden_size', 128)
     batch_size = cfg.get('batch_size', 10)
-    max_length = cfg.get('max_length', 400)
+    max_length = cfg.get('max_length', 100)
     learning_rate = cfg.get('learning_rate', 1e-3)
 
-    dataset = LibriSpeech(data_dir, DEVICE, scale_factor=FACTOR, max_length=max_length)
+    dataset = LibriSpeech(data_dir, DEVICE, max_length=max_length)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 
+    test_dataset = LibriSpeech(test_data_dir, DEVICE, max_length=max_length)
     encoder = EncoderRNN(config.N_LETTERS, hidden_size, DEVICE).to(DEVICE)
     decoder = AttnDecoderRNN(hidden_size, config.N_LETTERS, DEVICE, max_length=max_length).to(DEVICE)
     teacher_forcing_ratio = 0.5
 
     encoder_optimizer = torch.optim.RMSprop(encoder.parameters(), lr=learning_rate)
     decoder_optimizer = torch.optim.RMSprop(decoder.parameters(), lr=learning_rate)
-    
+
     encoder_scheduler = torch.optim.lr_scheduler.StepLR(encoder_optimizer, step_size=3, gamma=0.1)
     decoder_scheduler = torch.optim.lr_scheduler.StepLR(decoder_optimizer, step_size=3, gamma=0.1)
 
@@ -106,7 +108,9 @@ def main(cfg_path):
 
             if sample_idx % cfg.get('sample_iter', 100) == 0:
                 print(f"Epoch {epoch}, sample {sample_idx}: {loss.item()}")
-                sample(encoder, decoder, max_length)
+                _, _, text = random.choice(test_dataset)
+                text = text.to(DEVICE)
+                sample(text, encoder, decoder, max_length)
 
             if sample_idx % cfg.get('save_iter', 1000) == 0:
                 with open('encoder.pt', 'wb') as embed_file:
@@ -116,15 +120,13 @@ def main(cfg_path):
         decoder_scheduler.step()
 
 
-def sample(encoder, decoder, max_length):
+def sample(text, encoder, decoder, max_length):
+    encoder.eval()
+    decoder.eval()
     with torch.no_grad():
-        text = text_utils.get_input_vectors(
-            text_utils.unicode_to_ascii("I'M SORRY DAVE I'M AFRAID I CAN'T DO THAT")
-        ).to(DEVICE)
         text = text.unsqueeze(0)
 
         encoder_hidden = encoder.initHidden()
-
         encoder_outputs = torch.zeros(max_length, encoder.hidden_size, device=DEVICE)
 
         for ei in range(max_length):
@@ -142,7 +144,7 @@ def sample(encoder, decoder, max_length):
             topv, topi = decoder_output.topk(1)
             decoder_input = topi.detach()  # detach from history as input
             decoded_words.append(config.ALL_LETTERS[topi[0][0]])
-    
+
     print(' '.join(decoded_words))
 
 

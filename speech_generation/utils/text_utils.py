@@ -2,6 +2,8 @@ import os
 import unicodedata
 
 from keras.utils import to_categorical
+import numpy as np
+import requests
 import torch
 
 from speech_generation.config import ALL_LETTERS, N_LETTERS
@@ -81,3 +83,9 @@ def get_input_vectors(line, max_length=400):
     if len(one_hot) > max_length:
         one_hot = one_hot[:max_length]
     return torch.LongTensor(one_hot)
+
+
+def get_input_word_vectors(line, max_length=37):
+    data = requests.post('http://localhost:5000/vectors', json={'message': line})
+    return np.array(data)
+
