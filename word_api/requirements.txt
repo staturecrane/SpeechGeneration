@@ -1,0 +1,6 @@
+blinker==1.4
+flask==0.12.2
+pandas==0.22.0
+pytest==3.7.1
+raven==6.9.0
+-e git+git://github.com/erikavaris/tokenizer.git#egg=tokenizersagemaker==1.7.0
