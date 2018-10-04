@@ -27,7 +27,9 @@ def save_audio(outfile, sound, sample_rate):
 
 def reshape_audio(audio_tensor, hz, max_time=2, randomize=False):
     # max_length = int(hz * max_time)
-    max_length = 150528
+    # max_length = 150528 -- 3 * 224 * 224 
+    # max_length = 51200 -- 16000 * 3 ??
+    max_length = 196608
     audio_tensor = audio_tensor.view(-1)
     if len(audio_tensor) < max_length:
         new_audio = torch.zeros(max_length)
@@ -45,3 +47,4 @@ def reshape_audio(audio_tensor, hz, max_time=2, randomize=False):
         else:
             audio_tensor = audio_tensor[:max_length]
     return audio_tensor
+

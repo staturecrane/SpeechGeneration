@@ -1,5 +1,7 @@
 import math
 
+import mock
+import numpy as np
 import pytest
 import tensorflow as tf
 import torch
@@ -16,10 +18,15 @@ def test_load_audio():
     audio_utils.save_audio('saved_output.wav', audio, sample_rate)
 
 
-def test_load_text():
+
+def test_load_word_vectors():
     sentence = 'test a sentence for me John'
     sen_length = len(sentence)
-    max_length = 100
+    max_length = 37
+    with mock.patch('requests.post') as post_request:
+        response = mock.Mock()
+        response.json.return_value = [np.zeros((300)) for i in range(sen_length)]
 
-    vectors = text_utils.get_input_vectors(sentence, max_length=max_length)
-    assert len(vectors) == max_length
+        post_request.return_value = response
+        vectors = text_utils.get_input_word_vectors(sentence, max_length=max_length)
+        assert len(vectors) == max_length

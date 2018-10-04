@@ -3,11 +3,11 @@ test-data: 'test-data'
 hidden_size: 256
 batch_size: 1 
 sample_iter: 100
-max_length: 160
+max_length: 140
 critic_iters: 5
 learning_rate: 0.00001
 generation_output_directory: 'generated'
 
-checkpoint: True
+# checkpoint: True
 checkpoint_directory: 'checkpoints'
 checkpoint_out_directory: 'new_checkpoints'

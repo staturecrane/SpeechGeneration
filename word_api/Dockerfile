@@ -20,7 +20,7 @@ COPY requirements.txt /app
 RUN pip3 install -q -r requirements.txt
 
 COPY main.py /app
-COPY librispeech_gensim.bin /app
+COPY librispeech* /app/
 
 EXPOSE 8000
 

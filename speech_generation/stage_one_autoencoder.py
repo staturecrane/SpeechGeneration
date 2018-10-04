@@ -106,7 +106,7 @@ def main(cfg_path):
                 with open(encoder_output_name, 'wb') as enc_file:
                     torch.save(encoder.state_dict(), enc_file)
 
-                decoder_output_name = f'{checkpoint_out_directory}/audio-decoder.pt'
+                decoder_output_name = f'{checkpoint_out_directory}/audio_decoder.pt'
                 with open(decoder_output_name, 'wb') as dec_file:
                     torch.save(decoder.state_dict(), dec_file)
 

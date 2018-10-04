@@ -86,6 +86,13 @@ def get_input_vectors(line, max_length=400):
 
 
 def get_input_word_vectors(line, max_length=37):
-    data = requests.post('http://localhost:5000/vectors', json={'message': line})
-    return np.array(data)
-
+    data = requests.post('http://localhost:8000/vectors', json={'message': line})
+    vectors = data.json()
+    embed_dim = len(vectors[0])
+    vector_length = len(vectors)
+    if vector_length < max_length:
+        for _ in range(max_length - vector_length):
+            vectors.append(np.zeros(embed_dim))
+    elif len(vectors) > max_length:
+        vectors = vectors[:max_length]
+    return np.array(vectors)

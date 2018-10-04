@@ -1,4 +1,7 @@
+import sys
 from gensim.models import KeyedVectors
 
-word_vectors = KeyedVectors.load_word2vec_format('twitter.word2vec.txt')
-word_vectors.save_word2vec_format('twitter.word2vec.bin', binary=True)
+filename = sys.argv[1]
+
+word_vectors = KeyedVectors.load_word2vec_format(f'{filename}.vec')
+word_vectors.save_word2vec_format(f'{filename}_gensim.bin', binary=True)
