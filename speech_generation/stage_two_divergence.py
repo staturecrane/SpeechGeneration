@@ -16,8 +16,8 @@ import torchaudio
 import yaml
 
 from speech_generation.config import N_LETTERS
-from speech_generation.speech_model.model import AttnDecoderRNN, Encoder, TextDecoder, EncoderRNN, Vgg16
-from speech_generation.speech_model.loader import LibriSpeechVectors
+from speech_generation.speech_model.model import Discriminator, EncoderRNN, TextDecoder, TextEncoder, Vgg16
+from speech_generation.speech_model.loader import LibriSpeech, LibriSpeechIDX
 
 
 def main(cfg_path):
@@ -46,94 +46,168 @@ def main(cfg_path):
     generation_output_directory = cfg.get('generation_output_directory')
     checkpoint_out_directory = os.path.abspath(cfg.get('checkpoint_out_directory'))
 
-    dataset = LibriSpeechVectors(data_dir, device, max_time=max_time, max_length=max_length)
+    dataset = LibriSpeechIDX(data_dir, device, max_time=max_time, max_length=max_length)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 
-    test_dataset = LibriSpeechVectors(data_dir, device, max_time=max_time, max_length=max_length)
+    test_dataset = LibriSpeechIDX(data_dir, device, max_time=max_time, max_length=max_length)
 
-    encoder = EncoderRNN(300, hidden_size, device).to(device)
-    decoder = TextDecoder(num_convolutional_features, hidden_size, num_channels).to(device)
+    encoder = EncoderRNN(N_LETTERS, hidden_size, device).to(device)
+    encoder_weights = torch.load('encoder.pt')
+    encoder.load_state_dict(encoder_weights)
 
+    for param in encoder.parameters():
+        param.requires_grad = False
+
+    encoder_audio = TextEncoder(num_convolutional_features, 1).to(device)
+    decoder = TextDecoder(num_convolutional_features, 1, num_channels).to(device)
+    discriminator = Discriminator(num_convolutional_features, 1).to(device)
+
+    embedding = nn.Embedding(2, 10).to(device)
     vgg = Vgg16(requires_grad=False).to(device)
 
-    optimizer_rnn = torch.optim.Adam(encoder.parameters(), lr=learning_rate)
-    optimizer_d = torch.optim.Adam(decoder.parameters(), lr=learning_rate)
+    # optimizer_rnn = torch.optim.Adam(encoder.parameters(), lr=learning_rate)
+    optimizer_encoder = torch.optim.Adam(list(encoder_audio.parameters()) + list(embedding.parameters()), lr=learning_rate)
+    optimizer_decoder = torch.optim.Adam(decoder.parameters(), lr=learning_rate)
+    optimizer_discriminator = torch.optim.Adam(discriminator.parameters(), lr=learning_rate)
 
-    mse = torch.nn.L1Loss()
+    # encoder_scheduler = torch.optim.lr_scheduler.StepLR(optimizer_rnn, step_size=3, gamma=0.1)
+    # decoder_scheduler = torch.optim.lr_scheduler.StepLR(optimizer_d, step_size=3, gamma=0.1)
+
+    l1 = torch.nn.L1Loss()
+    mse = torch.nn.MSELoss()
+    bce = torch.nn.BCELoss()
+
+    real_label = 1
+    fake_label = 0
+
+    gen_loss = 0
+    err_d = 0
 
     for epoch in range(100):
         for sample_idx, (audio, speaker, text) in enumerate(dataloader):
-            audio, speaker, text = audio.to(device), speaker.to(device), text.to(device)
+            # final batch causes error -- TODO: find out why
+            try:
+                audio, speaker, text = audio.to(device), speaker.to(device), text.to(device)
+                encoder.train()
+                encoder_audio.train()
+                decoder.train()
 
-            encoder.train()
-            decoder.train()
+                # optimizer_rnn.zero_grad()
+                optimizer_encoder.zero_grad()
+                optimizer_decoder.zero_grad()
 
-            encoder.zero_grad()
-            decoder.zero_grad()
+                embedding.zero_grad()
+                encoder_audio.zero_grad()
+                decoder.zero_grad()
 
-            optimizer_rnn.zero_grad()
-            optimizer_d.zero_grad()
+                current_batch_size = audio.size(0)
 
-            current_batch_size = audio.size(0)
+                encoder_hidden = encoder.initHidden(current_batch_size)
+                encoder_outputs = torch.zeros(batch_size, max_length, encoder.hidden_size).to(device)
 
-            encoder_hidden = encoder.initHidden(current_batch_size)
+                for ei in range(max_length):
+                    encoder_output, encoder_hidden = encoder(
+                        text[:, ei], encoder_hidden)
+                    encoder_outputs[:, ei] = encoder_output[:, 0]
+                flattened_encoder_outputs = encoder_outputs.view(current_batch_size, 1, -1)
 
-            for ei in range(max_length):
-                encoder_output, encoder_hidden = encoder(
-                    text[:, ei].unsqueeze(0).float(), encoder_hidden
-                )
-            audio_output = decoder(encoder_output.view(current_batch_size, hidden_size, 1, 1))
+                gender_embeddings = embedding(speaker)
+                flattened_gender_embeddings = gender_embeddings.view(current_batch_size, 1, -1)
 
-            features_real = vgg(audio.view(current_batch_size, 3, 256, 256))
-            features_fake_rnn = vgg(audio_output)
+                encoder_inputs = torch.cat((flattened_encoder_outputs, flattened_gender_embeddings), 2)
 
-            err_g = mse(features_fake_rnn.relu2_2, features_real.relu2_2)
-            err_g.backward()
+                hidden = encoder_audio(encoder_inputs)
+                audio_output = decoder(hidden)
+                append = torch.zeros(current_batch_size, 1, 150528 - (audio_output.size(2))).to(device).fill_(0.0)
 
-            optimizer_rnn.step()
-            optimizer_d.step()
+                real_concat = torch.cat((audio, append.detach()), 2)
+                gen_concat = torch.cat((audio_output, append.detach()), 2)
 
-            if sample_idx % cfg.get('sample_iter', 100) == 0:
-                print(f"Epoch {epoch}, sample {sample_idx} -- errG: {err_g.item()}")
-                _, _, text = random.choice(test_dataset)
-                text = text.to(device)
-                sample(text,
-                       encoder,
-                       decoder,
-                       generation_output_directory,
-                       epoch,
-                       sample_idx,
-                       16000,
-                       hidden_size,
-                       max_length,
-                       device)
+                features_real = vgg(real_concat.view(current_batch_size, 3, 224, 224))
+                features_fake = vgg(gen_concat.view(current_batch_size, 3, 224, 224))
 
+                reconstruction_loss = l1(features_fake.relu4_3, features_real.relu4_3)
+
+                # reconstruction_loss = l1(audio_output, audio)
+                # reconstruction_loss.backward()
+
+                label = torch.full((current_batch_size,), real_label).to(device)
+
+                for param in discriminator.parameters():
+                    param.requires_grad = True
+
+                discriminator.zero_grad()
+                disc_real = discriminator(audio)
+                err_d_real = mse(disc_real, label.view(current_batch_size, 1))
+                err_d_real.backward()
+
+                disc_fake = discriminator(audio_output.detach())
+                label.fill_(fake_label)
+                err_d_fake = mse(disc_fake, label.view(current_batch_size, 1))
+                err_d_fake.backward()
+
+                err_d = err_d_real + err_d_fake
+
+                if err_d > 0.1:
+                    optimizer_discriminator.step()
+
+                for param in discriminator.parameters():
+                    param.requires_grad = False
+
+                disc_gen = discriminator(audio_output)
+                label.fill_(real_label)
+                gen_loss = mse(disc_gen, label.view(current_batch_size, 1)) + (reconstruction_loss)
+                gen_loss.backward()
+
+                # optimizer_rnn.step()
+                optimizer_encoder.step()
+                optimizer_decoder.step()
+
+                if sample_idx % cfg.get('sample_iter', 100) == 0:
+                    print(f"Epoch {epoch}, sample {sample_idx} -- errD: {err_d}, errG: {gen_loss}")
+                    _, _, text = random.choice(test_dataset)
+                    text = text.to(device)
+                    sample(text,
+                        encoder,
+                        encoder_audio,
+                        decoder,
+                        generation_output_directory,
+                        epoch,
+                        sample_idx,
+                        16000,
+                        device,
+                        max_length)
+            except:
+                continue
             if sample_idx % cfg.get('save_iter', 1000) == 0:
-                encoder_output_name = f'{checkpoint_out_directory}/audio_rnn_encoder.pt'
+                encoder_output_name = f'{checkpoint_out_directory}/audio_encoder.pt'
                 with open(encoder_output_name, 'wb') as enc_file:
-                    torch.save(encoder.state_dict(), enc_file)
+                    torch.save(encoder_audio.state_dict(), enc_file)
 
                 decoder_output_name = f'{checkpoint_out_directory}/audio_decoder.pt'
-                with open(decoder_output_name, 'wb') as enc_file:
-                    torch.save(decoder.state_dict(), enc_file)
+                with open(decoder_output_name, 'wb') as dec_file:
+                    torch.save(decoder.state_dict(), dec_file)
 
 
-def sample(text, encoder_rnn, decoder, outfolder, epoch, sample_idx, sample_rate, hidden_size, max_length, device):
+def sample(text, encoder_rnn, encoder_audio, decoder, outfolder, epoch, sample_idx, sample_rate, device, max_length):
     encoder_rnn.eval()
+    encoder_audio.eval()
     decoder.eval()
     text = text.unsqueeze(0)
     with torch.no_grad():
         encoder_hidden = encoder_rnn.initHidden(1)
+        encoder_outputs = torch.zeros(max_length, encoder_rnn.hidden_size).to(device)
 
         for ei in range(max_length):
             encoder_output, encoder_hidden = encoder_rnn(
-                text[:, ei].unsqueeze(0).float(), encoder_hidden
-            )
-        encoder_reshaped = encoder_output.view(1, hidden_size, 1, 1)
-        audio_output_rnn = decoder(encoder_reshaped)
+                text[:, ei], encoder_hidden)
+            encoder_outputs[ei] = encoder_output[0, 0]
+
+        hidden = encoder_audio(encoder_outputs.view(1, 1, -1))
+        audio_output = decoder(hidden)
 
     audio_file_name = "{}/{:06d}-{:06d}.wav".format(outfolder, epoch, sample_idx)
-    output_to_cpu = audio_output_rnn.view(-1).cpu()
+    output_to_cpu = audio_output.view(-1).cpu()
     torchaudio.save(audio_file_name, output_to_cpu, sample_rate)
 
 

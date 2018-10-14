@@ -13,8 +13,8 @@ import yaml
 
 from speech_generation import config
 from speech_generation.utils import text_utils, audio_utils
-from speech_generation.speech_model.model import EncoderRNN, AttnDecoderRNN, AudioCNN
-from speech_generation.speech_model.loader import LibriSpeech
+from speech_generation.speech_model.model import EncoderRNN, AttnDecoderRNN
+from speech_generation.speech_model.loader import LibriSpeechIDX
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 FACTOR = 2**31
@@ -36,12 +36,16 @@ def main(cfg_path):
     max_length = cfg.get('max_length', 100)
     learning_rate = cfg.get('learning_rate', 1e-3)
 
-    dataset = LibriSpeech(data_dir, DEVICE, max_length=max_length)
+    dataset = LibriSpeechIDX(data_dir, DEVICE, max_length=max_length)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 
-    test_dataset = LibriSpeech(test_data_dir, DEVICE, max_length=max_length)
+    test_dataset = LibriSpeechIDX(test_data_dir, DEVICE, max_length=max_length)
     encoder = EncoderRNN(config.N_LETTERS, hidden_size, DEVICE).to(DEVICE)
-    decoder = AttnDecoderRNN(hidden_size, config.N_LETTERS, DEVICE, max_length=max_length).to(DEVICE)
+
+    # encoder_weights = torch.load('encoder.pt')
+    # encoder.load_state_dict(encoder_weights)
+
+    decoder = AttnDecoderRNN(hidden_size, config.N_LETTERS, max_length=max_length).to(DEVICE)
     teacher_forcing_ratio = 0.5
 
     encoder_optimizer = torch.optim.RMSprop(encoder.parameters(), lr=learning_rate)
@@ -50,7 +54,7 @@ def main(cfg_path):
     encoder_scheduler = torch.optim.lr_scheduler.StepLR(encoder_optimizer, step_size=3, gamma=0.1)
     decoder_scheduler = torch.optim.lr_scheduler.StepLR(decoder_optimizer, step_size=3, gamma=0.1)
 
-    criterion = torch.nn.NLLLoss()
+    criterion = torch.nn.CrossEntropyLoss()
 
     for epoch in range(100):
         for sample_idx, (_, _, text) in enumerate(dataloader):
@@ -62,7 +66,7 @@ def main(cfg_path):
             encoder.zero_grad()
             decoder.zero_grad()
 
-            encoder_hidden = encoder.initHidden()
+            encoder_hidden = encoder.initHidden(text.size(0))
 
             encoder_optimizer.zero_grad()
             decoder_optimizer.zero_grad()
@@ -80,16 +84,17 @@ def main(cfg_path):
 
             decoder_hidden = encoder_hidden
 
-            use_teacher_forcing = False # True if random.random() < teacher_forcing_ratio else False
+            use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
 
             if use_teacher_forcing:
                 # Teacher forcing: Feed the target as the next input
                 for di in range(max_length):
                     decoder_output, decoder_hidden, decoder_attention = decoder(
                         decoder_input, decoder_hidden, encoder_outputs)
-                    _, target_topi = text[:, di].topk(1)
-                    loss += criterion(decoder_output, target_topi[0])
-                    decoder_input = target_topi  # Teacher forcing
+                    # _, target_topi = text[:, di].topk(1)
+                    target = text[:, di]
+                    loss += criterion(decoder_output, target)
+                    decoder_input = target  # Teacher forcing
             else:
                 # Without teacher forcing: use its own predictions as the next input
                 for di in range(max_length):
@@ -98,8 +103,8 @@ def main(cfg_path):
                     topv, topi = decoder_output.topk(1)
                     decoder_input = topi.detach()  # detach from history as input
 
-                    _, target_topi = text[:, di].topk(1)
-                    loss += criterion(decoder_output, target_topi[0])
+                    # _, target_topi = text[:, di].topk(1)
+                    loss += criterion(decoder_output, text[:, di])
 
             loss.backward()
 
@@ -107,7 +112,7 @@ def main(cfg_path):
             decoder_optimizer.step()
 
             if sample_idx % cfg.get('sample_iter', 100) == 0:
-                print(f"Epoch {epoch}, sample {sample_idx}: {loss.item()}")
+                print(f"Epoch {epoch}, sample {sample_idx}: {loss.item() / max_length}")
                 _, _, text = random.choice(test_dataset)
                 text = text.to(DEVICE)
                 sample(text, encoder, decoder, max_length)
@@ -126,7 +131,7 @@ def sample(text, encoder, decoder, max_length):
     with torch.no_grad():
         text = text.unsqueeze(0)
 
-        encoder_hidden = encoder.initHidden()
+        encoder_hidden = encoder.initHidden(1)
         encoder_outputs = torch.zeros(max_length, encoder.hidden_size, device=DEVICE)
 
         for ei in range(max_length):

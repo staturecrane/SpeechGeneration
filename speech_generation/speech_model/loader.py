@@ -52,8 +52,7 @@ class LibriSpeech(Dataset):
 
         speaker = filekey.split('-')[0]
         speaker_idx = self.speaker_dict[speaker]
-        speaker_tensor = torch.zeros(2)
-        speaker_tensor[speaker_idx] = 1.0
+        speaker_tensor = torch.LongTensor([speaker_idx])
         sample_rate, audio = audio_utils.load_audio(f'{self.root_dir}/{filekey}.wav')
         char_inputs = text_utils.get_input_vectors(sample, max_length=self.max_length)
         audio_target = audio_utils.reshape_audio(audio,
@@ -90,6 +89,39 @@ class LibriSpeechVectors(Dataset):
         sample_rate, audio = audio_utils.load_audio(f'{self.root_dir}/{filekey}.wav')
         # char_inputs = text_utils.get_input_vectors(sample, max_length=self.max_length)
         char_inputs = torch.from_numpy(text_utils.get_input_word_vectors(sample, max_length=self.max_length))
+        audio_target = audio_utils.reshape_audio(audio,
+                                                 sample_rate,
+                                                 max_time=self.max_time,
+                                                 randomize=self.randomize_speaker_samples)
+        return audio_target.view(1, -1), speaker_tensor, char_inputs
+
+
+class LibriSpeechIDX(Dataset):
+    def __init__(self, root_dir, device, max_time=5, max_length=400, randomize_speaker_samples=False):
+        self.device = device
+        self.max_length = max_length
+        self.max_time = max_time
+        self.randomize_speaker_samples = randomize_speaker_samples
+
+        self.speaker_dict = json.loads(open('speaker_dict.json').read())
+
+        dataset = text_utils.load_dataset(root_dir)
+        self.dataset = [(key, value) for key, value in dataset.items()]
+        self.root_dir = root_dir
+        random.shuffle(self.dataset)
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        filekey, sample = self.dataset[idx]
+
+        speaker = filekey.split('-')[0]
+        speaker_idx = self.speaker_dict[speaker]
+        speaker_tensor = torch.LongTensor([speaker_idx])
+        sample_rate, audio = audio_utils.load_audio(f'{self.root_dir}/{filekey}.wav')
+        # char_inputs = text_utils.get_input_vectors(sample, max_length=self.max_length)
+        char_inputs = text_utils.get_input_idx_vectors(sample, max_length=self.max_length)
         audio_target = audio_utils.reshape_audio(audio,
                                                  sample_rate,
                                                  max_time=self.max_time,

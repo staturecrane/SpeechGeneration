@@ -85,6 +85,17 @@ def get_input_vectors(line, max_length=400):
     return torch.LongTensor(one_hot)
 
 
+
+def get_input_idx_vectors(line, max_length=400):
+    idx_list = [ALL_LETTERS.index(char) for char in line]
+    if len(idx_list) < max_length:
+        for i in range(max_length - len(idx_list)):
+            idx_list.append(ALL_LETTERS.index(unicode_to_ascii(' ')))
+    if len(idx_list) > max_length:
+        idx_list = idx_list[:max_length]
+    return torch.LongTensor(idx_list)
+
+
 def get_input_word_vectors(line, max_length=37):
     data = requests.post('http://localhost:8000/vectors', json={'message': line})
     vectors = data.json()

@@ -14,12 +14,12 @@ class EncoderRNN(nn.Module):
         super(EncoderRNN, self).__init__()
         self.hidden_size = hidden_size
         self.device = device
-        # self.embedding = nn.Embedding(input_size, 10)
-        self.gru = nn.GRU(input_size, hidden_size, batch_first=True)
+        self.embedding = nn.Embedding(input_size, hidden_size)
+        self.gru = nn.GRU(hidden_size, hidden_size, batch_first=True)
 
     def forward(self, input, hidden):
-        # embedded = self.embedding(input)
-        output, hidden = self.gru(input, hidden)
+        embedded = self.embedding(input).view(input.size(0), 1, -1)
+        output, hidden = self.gru(embedded, hidden)
         return output, hidden
 
     def initHidden(self, batch_size):
@@ -75,33 +75,60 @@ class TextDecoder(nn.Module):
     def __init__(self, nf, z_dim, nc):
         super(TextDecoder, self).__init__()
         self.main = torch.nn.Sequential(
-            torch.nn.ConvTranspose2d(z_dim, nf * 32, 4, 1, 0, bias=False),
-            # torch.nn.BatchNorm2d(nf * 64),
-            # torch.nn.LeakyReLU(0.2, inplace=True),
-            # torch.nn.ConvTranspose2d(nf * 64, nf * 32, 4, 2, 1, bias=False),
-            torch.nn.BatchNorm2d(nf * 32),
+            torch.nn.ConvTranspose1d(z_dim, nf * 64, 4, 2, 1, bias=False),
+            torch.nn.BatchNorm1d(nf * 64),
             torch.nn.LeakyReLU(0.2, inplace=True),
-            torch.nn.ConvTranspose2d(nf * 32, nf * 16, 4, 2, 1, bias=False),
-            torch.nn.BatchNorm2d(nf * 16),
+            torch.nn.ConvTranspose1d(nf * 64, nf * 32, 4, 2, 1, bias=False),
+            torch.nn.BatchNorm1d(nf * 32),
             torch.nn.LeakyReLU(0.2, inplace=True),
-            torch.nn.ConvTranspose2d(nf * 16, nf * 8, 4, 2, 1, bias=False),
-            torch.nn.BatchNorm2d(nf * 8),
+            torch.nn.ConvTranspose1d(nf * 32, nf * 16, 4, 2, 1, bias=False),
+            torch.nn.BatchNorm1d(nf * 16),
             torch.nn.LeakyReLU(0.2, inplace=True),
-            torch.nn.ConvTranspose2d(nf * 8, nf * 4, 4, 2, 1, bias=False),
-            torch.nn.BatchNorm2d(nf * 4),
+            torch.nn.ConvTranspose1d(nf * 16, nf * 8, 4, 2, 1, bias=False),
+            torch.nn.BatchNorm1d(nf * 8),
             torch.nn.LeakyReLU(0.2, inplace=True),
-            torch.nn.ConvTranspose2d(nf * 4, nf * 2, 4, 2, 1, bias=False),
-            torch.nn.BatchNorm2d(nf * 2),
+            torch.nn.ConvTranspose1d(nf * 8, nf * 4, 4, 2, 1, bias=False),
+            torch.nn.BatchNorm1d(nf * 4),
             torch.nn.LeakyReLU(0.2, inplace=True),
-            torch.nn.ConvTranspose2d(nf * 2, nf, 4, 2, 1, bias=False),
-            torch.nn.BatchNorm2d(nf),
+            torch.nn.ConvTranspose1d(nf * 4, nf * 2, 4, 2, 1, bias=False),
+            torch.nn.BatchNorm1d(nf * 2),
             torch.nn.LeakyReLU(0.2, inplace=True),
-            torch.nn.ConvTranspose2d(nf, 3, 4, 2, 1, bias=False),
+            torch.nn.ConvTranspose1d(nf * 2, nf, 4, 2, 1, bias=False),
+            torch.nn.BatchNorm1d(nf),
+            torch.nn.LeakyReLU(0.2, inplace=True),
+            torch.nn.ConvTranspose1d(nf, nc, 4, 2, 1, bias=False),
             torch.nn.Tanh()
         )
 
     def forward(self, input):
         return self.main(input)
+
+class TextEncoder(nn.Module):
+    def __init__(self, nf, nc):
+        super(TextEncoder, self).__init__()
+        self.main = torch.nn.Sequential(
+            torch.nn.Conv1d(1, nf, 4, 2, 1, bias=False),
+            torch.nn.LeakyReLU(0.2, inplace=True),
+            torch.nn.Conv1d(nf, nf * 2, 4, 2, 1, bias=False),
+            torch.nn.BatchNorm1d(nf * 2),
+            torch.nn.LeakyReLU(0.2, inplace=True),
+            torch.nn.Conv1d(nf * 2, nf * 4, 4, 2, 1, bias=False),
+            torch.nn.BatchNorm1d(nf * 4),
+            torch.nn.LeakyReLU(0.2, inplace=True),
+            # torch.nn.Conv1d(nf * 4, nf * 8, 4, 2, 1, bias=False),
+            # torch.nn.BatchNorm1d(nf * 8),
+            # torch.nn.LeakyReLU(0.2, inplace=True),
+            # torch.nn.Dropout(0.2),
+            # torch.nn.Conv1d(nf * 8, nf * 16, 4, 2, 1, bias=False),
+            # torch.nn.BatchNorm1d(nf * 16),
+            # torch.nn.LeakyReLU(0.2, inplace=True),
+            # torch.nn.Dropout(0.2),
+            torch.nn.Conv1d(nf * 4, 1, 4, 2, 1, bias=False)
+        )
+
+    def forward(self, input):
+        return self.main(input)
+
 
 
 class Discriminator(nn.Module):
@@ -130,7 +157,7 @@ class Discriminator(nn.Module):
             torch.nn.LeakyReLU(0.2, inplace=True),
             torch.nn.Conv1d(nf * 64, 1, 4, 1, 0, bias=False, )
         )
-        self.out_layer = nn.Linear(1173, 1)
+        self.out_layer = nn.Linear(623, 1)
         self.sig = torch.nn.Sigmoid()
 
     def forward(self, input):
@@ -196,39 +223,9 @@ class AttnDecoderRNN(nn.Module):
         output = F.relu(output)
         output, hidden = self.gru(output, hidden)
 
-        output = F.tanh(self.out(output[0]))
+        output = self.out(output[0])
         return output, hidden, attn_weights
 
-
-class AttnDecoderAudioRNN(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, dropout_p=0.1, max_length=294):
-        super(AttnDecoderAudioRNN, self).__init__()
-        self.input_Size = input_size
-        self.hidden_size = hidden_size
-        self.output_size = output_size
-        self.dropout_p = dropout_p
-        self.max_length = max_length
-
-        self.attn = nn.Linear(self.input_size * 2, self.max_length)
-        self.attn_combine = nn.Linear(self.input_size * 2, self.hidden_size)
-        self.dropout = nn.Dropout(self.dropout_p)
-        self.gru = nn.GRU(self.hidden_size, self.hidden_size)
-        self.out = nn.Linear(self.hidden_size, self.output_size)
-
-    def forward(self, input, hidden, encoder_outputs):
-        attn_weights = F.softmax(
-            self.attn(torch.cat((input, hidden[0]), 1)), dim=1)
-        attn_applied = torch.bmm(attn_weights.unsqueeze(0),
-                                 encoder_outputs.unsqueeze(0))
-
-        output = torch.cat((input, attn_applied[0]), 1)
-        output = self.attn_combine(output).unsqueeze(0)
-
-        output = F.relu(output)
-        output, hidden = self.gru(output, hidden)
-
-        output = F.tanh(self.out(output[0]))
-        return output, hidden, attn_weights
 
 # copypasta
 class Vgg16(torch.nn.Module):
