@@ -52,20 +52,27 @@ def main(cfg_path):
     test_dataset = LibriSpeechIDX(data_dir, device, max_time=max_time, max_length=max_length)
 
     encoder = EncoderRNN(N_LETTERS, hidden_size, device).to(device)
-    encoder_weights = torch.load('encoder.pt')
+    encoder_weights = torch.load(f'{checkpoint_out_directory}/encoder.pt')
     encoder.load_state_dict(encoder_weights)
 
-    for param in encoder.parameters():
-        param.requires_grad = False
+    # for param in encoder.parameters():
+    #     param.requires_grad = False
 
     encoder_audio = TextEncoder(num_convolutional_features, 1).to(device)
     decoder = TextDecoder(num_convolutional_features, 1, num_channels).to(device)
     discriminator = Discriminator(num_convolutional_features, 1).to(device)
 
+    if cfg.get('checkpoint'):
+        encoder_audio_weights = torch.load(f'{checkpoint_out_directory}/audio_encoder.pt')
+        decoder_audio_weights = torch.load(f'{checkpoint_out_directory}/audio_decoder.pt')
+
+        encoder.load_state_dict(encoder_audio_weights)
+        decoder.load_state_Dict(decoder_audio_weights)
+
     embedding = nn.Embedding(2, 10).to(device)
     vgg = Vgg16(requires_grad=False).to(device)
 
-    # optimizer_rnn = torch.optim.Adam(encoder.parameters(), lr=learning_rate)
+    optimizer_rnn = torch.optim.Adam(encoder.parameters(), lr=learning_rate)
     optimizer_encoder = torch.optim.Adam(list(encoder_audio.parameters()) + list(embedding.parameters()), lr=learning_rate)
     optimizer_decoder = torch.optim.Adam(decoder.parameters(), lr=learning_rate)
     optimizer_discriminator = torch.optim.Adam(discriminator.parameters(), lr=learning_rate)
@@ -159,7 +166,7 @@ def main(cfg_path):
                 gen_loss = mse(disc_gen, label.view(current_batch_size, 1)) + (reconstruction_loss)
                 gen_loss.backward()
 
-                # optimizer_rnn.step()
+                optimizer_rnn.step()
                 optimizer_encoder.step()
                 optimizer_decoder.step()
 
@@ -187,6 +194,14 @@ def main(cfg_path):
                 decoder_output_name = f'{checkpoint_out_directory}/audio_decoder.pt'
                 with open(decoder_output_name, 'wb') as dec_file:
                     torch.save(decoder.state_dict(), dec_file)
+
+                embed_output_name = f'{checkpoint_out_directory}/gender_embedding.pt'
+                with open(embed_output_name, 'wb') as emb_file:
+                    torch.save(embedding.state_dict(), emb_file)
+
+                rnn_output_name = f'{checkpoint_out_directory}/rnn_encoder.pt'
+                with open(embed_output_name, 'wb') as rnn_file:
+                    torch.save(encoder.state_dict(), rnn_file)
 
 
 def sample(text, encoder_rnn, encoder_audio, decoder, outfolder, epoch, sample_idx, sample_rate, device, max_length):
